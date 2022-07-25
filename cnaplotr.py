@@ -13,6 +13,10 @@ def plot_cnv():
     plots_dir = path.join(args.output_path, "plots")
     if not path.exists(plots_dir):
         mkdir(plots_dir)
+    # create directory to store all plots for the given sample
+    sample_dir = path.join(plots_dir, args.sample_name)
+    if not path.exists(sample_dir):
+        mkdir(sample_dir)
     # load CNR file data
     print(f"Loading copy number data from {args.cnr_file}...")
     raw_cnv_data = pd.read_csv(args.cnr_file, sep='\t', header=0)
@@ -21,8 +25,8 @@ def plot_cnv():
     cnv_data.reset_index(inplace=True, drop=True)
     cnv_data.reset_index(inplace=True)
 
-    genome_view_file = create_genome_plot(cnv_data, plots_dir, args.output_format, args.sample_name)
-    chr_plot_files = create_chrom_plots(cnv_data, plots_dir, args.output_format, args.sample_name)
+    genome_view_file = create_genome_plot(cnv_data, sample_dir, args.output_format, args.sample_name)
+    chr_plot_files = create_chrom_plots(cnv_data, sample_dir, args.output_format, args.sample_name)
     
     print("Merging plots into a single PDF file...")
     # Load genome view image and convert to RGB
