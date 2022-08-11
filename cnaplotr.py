@@ -173,7 +173,7 @@ def parse_args():
     parser.add_argument("-o", "--output-path",
                         type=check_path,
                         required=True,
-                        help="Output folder to save plot images.")
+                        help="Output folder to save plot images. This folder must exist. A 'plots' folder will be created inside the output path folder.")
     parser.add_argument("-f", "--output-format",
                         type=acceptable_formats,
                         default="png",
