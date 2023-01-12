@@ -9,10 +9,7 @@ COLOR_PALETTE = ['#db5e56', '#56db5e', '#5784DB', '#DB9457', '#57DB94', '#9457DB
 
 def plot_cnv():
     args = parse_args()
-    # create the plots output folder
-    plots_dir = path.join(args.output_path, "plots")
-    if not path.exists(plots_dir):
-        mkdir(plots_dir)
+    plots_dir = args.output_path
     # create directory to store all plots for the given sample
     sample_dir = path.join(plots_dir, args.sample_name)
     if not path.exists(sample_dir):
@@ -173,7 +170,7 @@ def parse_args():
     parser.add_argument("-o", "--output-path",
                         type=check_path,
                         required=True,
-                        help="Output folder to save plot images. This folder must exist. A 'plots' folder will be created inside the output path folder.")
+                        help="Output folder to save plot images. This folder must exist.")
     parser.add_argument("-f", "--output-format",
                         type=acceptable_formats,
                         default="png",
