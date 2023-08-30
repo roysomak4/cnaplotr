@@ -1,14 +1,22 @@
 import argparse
+from os import listdir, path, remove
+
 import pandas as pd
-from matplotlib import pyplot as plt
-from os import path, listdir, remove
-from PIL import Image
 import seaborn as sns
+from matplotlib import pyplot as plt
+from PIL import Image
 
 
-def covplot():
+def covplot() -> None:
     args = parse_args()
 
+    # set output filenames
+    output_pdf_file = path.join(
+        args.output_path, f"{args.sample_name}_gene_coverage_plot.pdf"
+    )
+    output_cov_file = path.join(
+        args.output_path, f"{args.sample_name}_low_coverage_genes.txt"
+    )
     # load coverage data into pandas dataframe
     print("Loading BED coverage data...")
     column_names = ["chrom", "start", "stop", "exon_info", "coverage"]
@@ -47,14 +55,17 @@ def covplot():
         generate_plot(
             cov_df, args.sample_name, args.output_path, args.output_format, iteration
         )
-    print(low_cov_genes)
-    print("Generate PDF plot file...")
-    output_pdf_file = generate_pdf(args.output_path, args.sample_name)
 
+    print("Generate PDF plot file...")
+    generate_pdf(output_pdf_file, args.sample_name, args.output_path)
     print(f"Plot saved at {output_pdf_file}")
 
+    print("Writing low coverage gene list...")
+    write_low_cov_genes(low_cov_genes, output_cov_file)
+    print(f"Data saved at {output_cov_file}")
 
-def generate_low_cov_gene_list(cov_df: list):
+
+def generate_low_cov_gene_list(cov_df: list) -> list:
     low_cov_genes = []
     gene_cov_df = cov_df[0][["gene", "coverage"]]
     gene_cov_df = (
@@ -65,7 +76,15 @@ def generate_low_cov_gene_list(cov_df: list):
     return low_cov_genes
 
 
-def generate_pdf(output_path, sample_name):
+def write_low_cov_genes(low_cov_genes: list, output_file: str) -> None:
+    outbuffer = "None\n"
+    if len(low_cov_genes) > 0:
+        outbuffer = ", ".join(low_cov_genes) + "\n"
+    with open(output_file, "w") as of:
+        of.write(outbuffer)
+
+
+def generate_pdf(output_pdf_file: str, sample_name: str, output_path: str) -> None:
     # find list of png files in the output folder
     png_files = [
         path.join(output_path, x)
@@ -73,7 +92,6 @@ def generate_pdf(output_path, sample_name):
         if (x.endswith(".png") and sample_name in x)
     ]
     png_files.sort()
-    output_pdf_file = path.join(output_path, f"{sample_name}_gene_coverage_plot.pdf")
     output_pdf_hdl = Image.open(png_files[0]).convert("RGB")
     cov_images = []
     for image_file in png_files[1:]:
@@ -82,10 +100,11 @@ def generate_pdf(output_path, sample_name):
     # delete the intermediate png files
     for image_file in png_files:
         remove(image_file)
-    return output_pdf_file
 
 
-def generate_plot(cov_df, sample_name, output_path, file_type, iteration):
+def generate_plot(
+    cov_df: list, sample_name: str, output_path: str, file_type: str, iteration: int
+) -> None:
     plt.figure(figsize=(30, 17.14))
     plt.rcParams["axes.labelsize"] = 22
     plt.rcParams["xtick.labelsize"] = 16
@@ -103,7 +122,7 @@ def generate_plot(cov_df, sample_name, output_path, file_type, iteration):
     plt.savefig(output_file, dpi=300)
 
 
-def chunk_list(input_list, chunk_size):
+def chunk_list(input_list: list, chunk_size: int) -> list:
     retinfo = []
     counter = 0
     tmp_list = []
@@ -164,7 +183,7 @@ def acceptable_formats(format: str):
         )
 
 
-def check_path(file_path: str):
+def check_path(file_path: str) -> str:
     if not path.exists(file_path):
         raise argparse.ArgumentTypeError(
             "Error: Provided output directory does not exist."
