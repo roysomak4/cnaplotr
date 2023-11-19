@@ -117,10 +117,17 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-i",
-        "--cnr-file",
+        "--vcf-file",
         type=check_path,
         required=True,
-        help="CNR file containing weighted log2 ratio info.",
+        help="Input VCF file. Should be normalized if possible. Variant annotation or HGVS nomenclature is not required.",
+    )
+    parser.add_argument(
+        "-s",
+        "--known-snps-vcf",
+        type=check_path,
+        required=True,
+        help="VCF file containing the known SNPs for plotting LOH. Should be normalized if possible. Variant annotation or HGVS nomenclature is not required.",
     )
     parser.add_argument(
         "-o",
