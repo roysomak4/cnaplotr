@@ -1,0 +1,19 @@
+name: build-image-test
+
+on:
+  push:
+    branches: none
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: cchmc-research-mgps/glimps-api-server
+  PYTHON_VER: python3.11
+  OS_TYPE: alpine3.17
+  IMAGE_TAG: v0.57.0-python3.11-alpine3.17-test
+jobs:
+  build-glimps-api-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: repo-name
+        run: echo "${{ github.repository_owner}}"

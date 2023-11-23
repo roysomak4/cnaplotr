@@ -4,6 +4,8 @@ from matplotlib import pyplot as plt
 from os import path, mkdir
 from PIL import Image
 import seaborn as sns
+from typing import Tuple
+from load_loh import extract_loh_data
 
 COLOR_PALETTE = [
     "#db5e56",
@@ -26,18 +28,19 @@ def plot_cnv():
     sample_dir = path.join(plots_dir, args.sample_name)
     if not path.exists(sample_dir):
         mkdir(sample_dir)
-    # load CNR file data
-    print(f"Loading copy number data from {args.cnr_file}...")
+
+    # load LOH data
+    print(f"Loading LOH data from {args.vcf_file}...")
+    # place holder for a function that will retrieve the SNPs of interest from the input VCF file and return an output as a list of ["chromosome", "pos", "idx", "af"]
+    loh_vars = extract_loh_data(args.vcf_file, args.known_snps_vcf)
+
     cnames = ["chromosome", "pos", "idx", "af"]
-    cnv_data = pd.read_csv(args.cnr_file, delim_whitespace=True, names=cnames)
-    print(cnv_data.keys())
-    # transform bafs to heterozygosity
-    # we want A_af - B_af but A_af + B_af = 1, so this is just (1 - B_af) - B_af)
-    # = 1 - 2 * B_af
-    cnv_data.reset_index(inplace=True)
+    loh_data = pd.DataFrame(loh_vars, columns=cnames)
+    # cnv_data = pd.read_csv(args.cnr_file, delim_whitespace=True, names=cnames)
+    loh_data.reset_index(inplace=True)
 
     genome_view_file = create_genome_plot(
-        cnv_data, sample_dir, args.output_format, args.sample_name
+        loh_data, sample_dir, args.output_format, args.sample_name
     )
 
     print("Merging plots into a single PDF file...")
@@ -49,26 +52,28 @@ def plot_cnv():
 
 
 def create_genome_plot(
-    cnv_data: pd.DataFrame, output_path: str, file_format: str, sample_name: str
-):
-    print("Generating genome wide plot...")
+    loh_data: pd.DataFrame, output_path: str, file_format: str, sample_name: str
+) -> str:
+    print("Generating genome wide LOH plot...")
     # set figure size (w, h)
     sns.set(rc={"figure.figsize": (20, 8)})
     # plot theme
     sns.set_style("white")
     # set color palette count to match unique chromosome numbers
-    chrom_count = cnv_data["chromosome"].nunique()
+    chrom_count = loh_data["chromosome"].nunique()
     cpal_len = len(COLOR_PALETTE)
     chr_palette = COLOR_PALETTE * int(chrom_count / cpal_len)
     chr_palette.extend(COLOR_PALETTE[: chrom_count % cpal_len])
+
     # get the positions for the x axis ticks and corresponding labels
-    chromosomes, x_tick_pos, vline_positions = get_chr_x_axis_ticks(cnv_data)
+    chromosomes, x_tick_pos, vline_positions = get_chr_x_axis_ticks(loh_data)
+
     # create chart axes
     ax = sns.scatterplot(
         x="index",
         y="af",
         hue="chromosome",
-        data=cnv_data,
+        data=loh_data,
         s=5,
         legend=False,
         palette=chr_palette,
@@ -76,31 +81,34 @@ def create_genome_plot(
     # set custom x axis ticks data and rotate labels
     plt.xticks(x_tick_pos, chromosomes)
     ax.set_xticklabels(labels=chromosomes, rotation=90)
+
     # set vertical lines at the chromosome boundaries
     for pos in vline_positions:
         ax.axvline(x=pos, color="black", linewidth=0.6, alpha=0.1)
+
     # afs are bounded in [0,1] so y (= A_af - B_af) is bounded within [-1,1]
     ymin = 0
     ymax = 1
     ax.set(ylim=(ymin, ymax))
+
     # set chart title
     ax.set(title=f"LOH: {sample_name} - Genome View")
-    output_file = path.join(output_path, f"{sample_name}_all_genome_view.{file_format}")
+    output_file = path.join(output_path, f"{sample_name}_loh_genome_view.{file_format}")
     plt.savefig(output_file, dpi=300)
     return output_file
 
 
-def get_chr_x_axis_ticks(cnv_data: pd.DataFrame):
-    chromosomes = list(cnv_data["chromosome"].drop_duplicates())
+def get_chr_x_axis_ticks(loh_data: pd.DataFrame) -> Tuple[list, list, list]:
+    chromosomes = list(loh_data["chromosome"].drop_duplicates())
     wg_x_tick_points = []
     chr_boundaries = []
     end_idx = 0
     for chromosome in chromosomes:
-        chr_cnv_idx = cnv_data.loc[cnv_data["chromosome"] == chromosome]["index"]
-        start_idx = list(chr_cnv_idx[:1])[0]
-        end_idx = list(chr_cnv_idx[-1:])[0]
+        chr_loh_idx = loh_data.loc[loh_data["chromosome"] == chromosome]["index"]
+        start_idx = list(chr_loh_idx[:1])[0]
+        end_idx = list(chr_loh_idx[-1:])[0]
         chr_boundaries.append(start_idx)
-        idx_range = chr_cnv_idx.count()
+        idx_range = chr_loh_idx.count()
         if idx_range > 0:
             mid_point = 0
             if idx_range % 2 == 0:
@@ -123,7 +131,7 @@ def parse_args():
         help="Input VCF file. Should be normalized if possible. Variant annotation or HGVS nomenclature is not required.",
     )
     parser.add_argument(
-        "-s",
+        "-k",
         "--known-snps-vcf",
         type=check_path,
         required=True,
