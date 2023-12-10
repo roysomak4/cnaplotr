@@ -1,4 +1,5 @@
 import argparse
+import traceback
 import pandas as pd
 from matplotlib import pyplot as plt
 from os import path, mkdir
@@ -23,32 +24,39 @@ COLOR_PALETTE = [
 
 def plot_cnv():
     args = parse_args()
-    plots_dir = args.output_path
-    # create directory to store all plots for the given sample
-    sample_dir = path.join(plots_dir, args.sample_name)
-    if not path.exists(sample_dir):
-        mkdir(sample_dir)
+    try:
+        plots_dir = args.output_path
+        # create directory to store all plots for the given sample
+        sample_dir = path.join(plots_dir, args.sample_name)
+        if not path.exists(sample_dir):
+            mkdir(sample_dir)
 
-    # load LOH data
-    print(f"Loading LOH data from {args.vcf_file}...")
-    # place holder for a function that will retrieve the SNPs of interest from the input VCF file and return an output as a list of ["chromosome", "pos", "idx", "af"]
-    loh_vars = extract_loh_data(args.vcf_file, args.known_snps_vcf)
+        # load LOH data
+        print(f"Loading LOH data from {args.vcf_file}...")
+        # place holder for a function that will retrieve the SNPs of interest from the input VCF file and return an output as a list of ["chromosome", "pos", "idx", "af"]
+        loh_vars = extract_loh_data(args.vcf_file, args.known_snps_vcf)
 
-    cnames = ["chromosome", "pos", "idx", "af"]
-    loh_data = pd.DataFrame(loh_vars, columns=cnames)
-    # cnv_data = pd.read_csv(args.cnr_file, delim_whitespace=True, names=cnames)
-    loh_data.reset_index(inplace=True)
+        cnames = ["chromosome", "pos", "idx", "af"]
+        loh_data = pd.DataFrame(loh_vars, columns=cnames)
+        loh_data.reset_index(inplace=True)
 
-    genome_view_file = create_genome_plot(
-        loh_data, sample_dir, args.output_format, args.sample_name
-    )
+        genome_view_file = create_genome_plot(
+            loh_data, sample_dir, args.output_format, args.sample_name
+        )
 
-    print("Merging plots into a single PDF file...")
-    # Load genome view image and convert to RGB
-    genome_image = Image.open(genome_view_file).convert("RGB")
-    output_pdf_file = path.join(plots_dir, f"{args.sample_name}_cnv_plots.pdf")
-    genome_image.save(output_pdf_file, save_all=True)
-    print(f"PDF file written to {output_pdf_file}")
+        print("Merging plots into a single PDF file...")
+        # Load genome view image and convert to RGB
+        genome_image = Image.open(genome_view_file).convert("RGB")
+        output_pdf_file = path.join(plots_dir, f"{args.sample_name}_cnv_plots.pdf")
+        genome_image.save(output_pdf_file, save_all=True)
+        print(f"PDF file written to {output_pdf_file}")
+    except Exception as ex:
+        if args.verbose_error:
+            print(f"Error: {type(ex).__name__}")
+            traceback.print_exc()
+        else:
+            print(f"Error: {type(ex).__name__}")
+            print(f"Use the -v/--verbose-error flag for details")
 
 
 def create_genome_plot(
@@ -56,7 +64,7 @@ def create_genome_plot(
 ) -> str:
     print("Generating genome wide LOH plot...")
     # set figure size (w, h)
-    sns.set(rc={"figure.figsize": (20, 8)})
+    sns.set(rc={"figure.figsize": (20, 5)})
     # plot theme
     sns.set_style("white")
     # set color palette count to match unique chromosome numbers
@@ -80,7 +88,9 @@ def create_genome_plot(
     )
     # set custom x axis ticks data and rotate labels
     plt.xticks(x_tick_pos, chromosomes)
-    ax.set_xticklabels(labels=chromosomes, rotation=90)
+    ax.set_xticklabels(labels=chromosomes, rotation=0)
+    ax.set_xlabel("Chromosomes", fontdict={"size": 15})
+    ax.set_ylabel("B-allele fraction", fontdict={"size": 15})
 
     # set vertical lines at the chromosome boundaries
     for pos in vline_positions:
@@ -159,6 +169,14 @@ def parse_args():
         default="sample",
         required=True,
         help="Sample name to include in the chart title",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose-error",
+        type=bool,
+        default=False,
+        required=False,
+        help="Show detailed error traceback message. Default: False",
     )
     return parser.parse_args()
 
