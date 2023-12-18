@@ -120,6 +120,7 @@ def generate_plot(
         output_path, f"{sample_name}_gene_coverage_set{iteration}.{file_type}"
     )
     plt.savefig(output_file, dpi=300)
+    plt.close()
 
 
 def chunk_list(input_list: list, chunk_size: int) -> list:
