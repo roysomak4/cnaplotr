@@ -1,9 +1,10 @@
 import argparse
+from os import mkdir, path
+
 import pandas as pd
-from matplotlib import pyplot as plt
-from os import path, mkdir
-from PIL import Image
 import seaborn as sns
+from matplotlib import pyplot as plt
+from PIL import Image
 
 COLOR_PALETTE = [
     "#db5e56",
@@ -247,9 +248,7 @@ def acceptable_formats(format: str):
 
 def check_path(file_path: str):
     if not path.exists(file_path):
-        raise argparse.ArgumentTypeError(
-            "Error: Provided output directory does not exist."
-        )
+        raise argparse.ArgumentTypeError("Error: Provided directory does not exist.")
     else:
         return file_path
 

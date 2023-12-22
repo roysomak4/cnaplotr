@@ -186,9 +186,7 @@ def acceptable_formats(format: str):
 
 def check_path(file_path: str) -> str:
     if not path.exists(file_path):
-        raise argparse.ArgumentTypeError(
-            "Error: Provided output directory does not exist."
-        )
+        raise argparse.ArgumentTypeError("Error: Provided directory does not exist.")
     else:
         return file_path
 

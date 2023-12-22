@@ -9,6 +9,8 @@ def extract_loh_data(input_vcf: str, known_snps_vcf: str) -> list:
     var_idx = 0
     total_vars = 0
     soi = 0  # SNPs of interest
+    MIN_COVERAGE = 10
+    MIN_MAPQ = 50
     print("Loading and searching SNP info for LOH analysis...")
     with VariantFile(known_snps_vcf) as ks:
         with VariantFile(input_vcf) as invcf:
@@ -18,7 +20,7 @@ def extract_loh_data(input_vcf: str, known_snps_vcf: str) -> list:
                 for variant in invcf.fetch(region=search_space):
                     tcov = int(variant.info["DP"])
                     mapq = int(variant.info["MQ"])
-                    if tcov >= 10 and mapq >= 50:
+                    if tcov >= MIN_COVERAGE and mapq >= MIN_MAPQ:
                         soi += 1
                         var_info = []
                         var_info.append(variant.chrom.replace("chr", ""))
