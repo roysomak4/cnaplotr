@@ -5,6 +5,7 @@ import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
 from PIL import Image
+from load_loh import extract_loh_data
 
 COLOR_PALETTE = [
     "#db5e56",
@@ -27,7 +28,7 @@ def plot_cnv():
     sample_dir = path.join(plots_dir, args.sample_name)
     if not path.exists(sample_dir):
         mkdir(sample_dir)
-    # load CNR file data
+    # load CNV data from CNR file data
     print(f"Loading copy number data from {args.cnr_file}...")
     raw_cnv_data = pd.read_csv(args.cnr_file, sep="\t", header=0)
     # filter out antitarget regions
@@ -35,69 +36,177 @@ def plot_cnv():
     cnv_data.reset_index(inplace=True, drop=True)
     cnv_data.reset_index(inplace=True)
 
+    # Load LOH data
+    loh_vars = extract_loh_data(args.vcf_file, args.known_snps_vcf)
+    cnames = ["chromosome", "pos", "idx", "af"]
+    loh_data = pd.DataFrame(loh_vars, columns=cnames)
+    loh_data.reset_index(inplace=True)
+
     genome_view_file = create_genome_plot(
-        cnv_data, sample_dir, args.output_format, args.sample_name
+        sample_dir,
+        args.output_format,
+        args.sample_name,
+        cnv_data=cnv_data,
+        loh_data=loh_data,
     )
-    chr_plot_files = create_chrom_plots(
-        cnv_data, sample_dir, args.output_format, args.sample_name
-    )
+    # chr_plot_files = create_chrom_plots(
+    #     cnv_data, sample_dir, args.output_format, args.sample_name
+    # )
 
     print("Merging plots into a single PDF file...")
     # Load genome view image and convert to RGB
     genome_image = Image.open(genome_view_file).convert("RGB")
     # Load per chromosome view images and convert to RGB
     chr_images = []
-    for f in chr_plot_files:
-        chr_images.append(Image.open(f).convert("RGB"))
+    # for f in chr_plot_files:
+    #     chr_images.append(Image.open(f).convert("RGB"))
     output_pdf_file = path.join(plots_dir, f"{args.sample_name}_cnv_plots.pdf")
-    genome_image.save(output_pdf_file, save_all=True, append_images=chr_images)
+    # genome_image.save(output_pdf_file, save_all=True, append_images=chr_images)
+    genome_image.save(output_pdf_file, save_all=True)
     print(f"PDF file written to {output_pdf_file}")
 
 
 def create_genome_plot(
-    cnv_data: pd.DataFrame, output_path: str, file_format: str, sample_name: str
+    output_path: str,
+    file_format: str,
+    sample_name: str,
+    **plot_datasets,
 ):
-    print("Generating genome wide plot...")
-    # set figure size (w, h)
-    sns.set(rc={"figure.figsize": (20, 8)})
-    # plot theme
-    sns.set_style("white")
-    # set color palette count to match unique chromosome numbers
-    chrom_count = cnv_data["chromosome"].nunique()
-    cpal_len = len(COLOR_PALETTE)
-    chr_palette = COLOR_PALETTE * int(chrom_count / cpal_len)
-    chr_palette.extend(COLOR_PALETTE[: chrom_count % cpal_len])
-    # get the positions for the x axis ticks and corresponding labels
-    chromosomes, x_tick_pos, vline_positions = get_chr_x_axis_ticks(cnv_data)
-    # create chart axes
-    ax = sns.scatterplot(
-        x="index",
-        y="log2",
-        hue="chromosome",
-        data=cnv_data,
-        s=5,
-        legend=False,
-        palette=chr_palette,
-    )
-    # set custom x axis ticks data and rotate labels
-    plt.xticks(x_tick_pos, chromosomes)
-    ax.set_xticklabels(labels=chromosomes, rotation=90)
-    # set vertical lines at the chromosome boundaries
-    for pos in vline_positions:
-        ax.axvline(x=pos, color="black", linewidth=0.6, alpha=0.1)
-    # set y axis range dynamically
-    ymin = -3
-    ymax = cnv_data["log2"].max()
-    if ymax < 4:
-        ymax = 4
+    if "loh_data" in plot_datasets:
+        print("Generating genome wide plot for CNV & LOH...")
+        cnv_data = plot_datasets["cnv_data"]
+        loh_data = plot_datasets["loh_data"]
+
+        # Create subplot
+        fig, axes = plt.subplots(2, 1, figsize=(20, 16))
+        fig.suptitle(f"{sample_name} - CNV & LOH Genome View")
+
+        ############ Create CNV genome view plot
+        # set figure size (w, h)
+        # sns.set_theme(rc={"figure.figsize": (20, 8)})
+        # plot theme
+        sns.set_style("white")
+        # set color palette count to match unique chromosome numbers
+        chrom_count = cnv_data["chromosome"].nunique()
+        cpal_len = len(COLOR_PALETTE)
+        chr_palette = COLOR_PALETTE * int(chrom_count / cpal_len)
+        chr_palette.extend(COLOR_PALETTE[: chrom_count % cpal_len])
+        # get the positions for the x axis ticks and corresponding labels
+        chromosomes, x_tick_pos, vline_positions = get_chr_x_axis_ticks(cnv_data)
+        # create chart axes
+        cnv_plot = sns.scatterplot(
+            x="index",
+            y="log2",
+            hue="chromosome",
+            data=cnv_data,
+            s=5,
+            legend=False,
+            palette=chr_palette,
+            ax=axes[0],
+        )
+        # Set CNV plot title
+        axes[0].set_title("CNV plot")
+        # set custom x axis ticks data and rotate labels
+        plt.xticks(x_tick_pos, chromosomes)
+        cnv_plot.set_xticklabels(labels=chromosomes, rotation=90)
+        cnv_plot.set_xlabel("Chromosomes", fontdict={"size": 15})
+        cnv_plot.set_ylabel("Log2 ratio", fontdict={"size": 15})
+        # set vertical lines at the chromosome boundaries
+        for pos in vline_positions:
+            cnv_plot.axvline(x=pos, color="black", linewidth=0.6, alpha=0.1)
+        # set y axis range dynamically
+        ymin = -3
+        ymax = cnv_data["log2"].max()
+        if ymax < 4:
+            ymax = 4
+        else:
+            ymax += 1
+        cnv_plot.set(ylim=(ymin, ymax))
+
+        ################### Create LOH subplot
+        chrom_count = loh_data["chromosome"].nunique()
+        cpal_len = len(COLOR_PALETTE)
+        chr_palette = COLOR_PALETTE * int(chrom_count / cpal_len)
+        chr_palette.extend(COLOR_PALETTE[: chrom_count % cpal_len])
+        # get the positions for the x axis ticks and corresponding labels
+        chromosomes, x_tick_pos, vline_positions = get_chr_x_axis_ticks(loh_data)
+        # create chart axes
+        loh_plot = sns.scatterplot(
+            x="index",
+            y="af",
+            hue="chromosome",
+            data=loh_data,
+            s=5,
+            legend=False,
+            palette=chr_palette,
+            ax=axes[1],
+        )
+        # Set CNV plot title
+        axes[1].set_title("LOH plot")
+        # set custom x axis ticks data and rotate labels
+        plt.xticks(x_tick_pos, chromosomes)
+        loh_plot.set_xticklabels(labels=chromosomes, rotation=0)
+        loh_plot.set_xlabel("Chromosomes", fontdict={"size": 15})
+        loh_plot.set_ylabel("B-allele fraction", fontdict={"size": 15})
+
+        # set vertical lines at the chromosome boundaries
+        for pos in vline_positions:
+            loh_plot.axvline(x=pos, color="black", linewidth=0.6, alpha=0.1)
+        # afs are bounded in [0,1] so y (= A_af - B_af) is bounded within [-1,1]
+        ymin = 0
+        ymax = 1
+        loh_plot.set(ylim=(ymin, ymax))
+        output_file = path.join(
+            output_path, f"{sample_name}_loh_genome_view.{file_format}"
+        )
+        fig.savefig(output_file, dpi=300)
+        return output_file
     else:
-        ymax += 1
-    ax.set(ylim=(ymin, ymax))
-    # set chart title
-    ax.set(title=f"{sample_name} - Genome View")
-    output_file = path.join(output_path, f"{sample_name}_all_genome_view.{file_format}")
-    plt.savefig(output_file, dpi=300)
-    return output_file
+        print("Generating genome wide plot for CNV only...")
+        cnv_data = plot_datasets["cnv_data"]
+        # set figure size (w, h)
+        # sns.set(rc={"figure.figsize": (20, 8)})
+        sns.set_theme(rc={"figure.figsize": (20, 8)})
+        # plot theme
+        sns.set_style("white")
+        # set color palette count to match unique chromosome numbers
+        chrom_count = cnv_data["chromosome"].nunique()
+        cpal_len = len(COLOR_PALETTE)
+        chr_palette = COLOR_PALETTE * int(chrom_count / cpal_len)
+        chr_palette.extend(COLOR_PALETTE[: chrom_count % cpal_len])
+        # get the positions for the x axis ticks and corresponding labels
+        chromosomes, x_tick_pos, vline_positions = get_chr_x_axis_ticks(cnv_data)
+        # create chart axes
+        ax = sns.scatterplot(
+            x="index",
+            y="log2",
+            hue="chromosome",
+            data=cnv_data,
+            s=5,
+            legend=False,
+            palette=chr_palette,
+        )
+        # set custom x axis ticks data and rotate labels
+        plt.xticks(x_tick_pos, chromosomes)
+        ax.set_xticklabels(labels=chromosomes, rotation=90)
+        # set vertical lines at the chromosome boundaries
+        for pos in vline_positions:
+            ax.axvline(x=pos, color="black", linewidth=0.6, alpha=0.1)
+        # set y axis range dynamically
+        ymin = -3
+        ymax = cnv_data["log2"].max()
+        if ymax < 4:
+            ymax = 4
+        else:
+            ymax += 1
+        ax.set(ylim=(ymin, ymax))
+        # set chart title
+        ax.set(title=f"{sample_name} - Genome View")
+        output_file = path.join(
+            output_path, f"{sample_name}_all_genome_view.{file_format}"
+        )
+        plt.savefig(output_file, dpi=300)
+        return output_file
 
 
 def create_chrom_plots(
@@ -209,6 +318,20 @@ def parse_args():
         type=check_path,
         required=True,
         help="CNR file containing weighted log2 ratio info.",
+    )
+    parser.add_argument(
+        "-v",
+        "--vcf-file",
+        type=check_path,
+        required=True,
+        help="Input VCF file. Should be normalized if possible. Variant annotation or HGVS nomenclature is not required.",
+    )
+    parser.add_argument(
+        "-k",
+        "--known-snps-vcf",
+        type=check_path,
+        required=True,
+        help="VCF file containing the known SNPs for plotting LOH. Should be normalized if possible. Variant annotation or HGVS nomenclature is not required.",
     )
     parser.add_argument(
         "-o",
