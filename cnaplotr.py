@@ -214,7 +214,7 @@ def create_chrom_plots(
         plt.clf()  # clear prior figure
         # set figure size (w, h)
         # sns.set_theme(rc={"figure.figsize": (20, 8)})
-        plt.figure(figsize=(20, 8))
+        plt.figure(figsize=(20, 10))
         # plot theme
         sns.set_style("white")
         # get CNV data for specific chromosome
@@ -239,6 +239,9 @@ def create_chrom_plots(
         for pos in gene_vline_positions:
             ax.axvline(x=pos, color="black", linewidth=0.6, alpha=0.1)
         plt.xticks(x_tick_pos, genes)
+        # set axis label title
+        ax.set_xlabel("Gene", fontdict={"size": 20})
+        ax.set_ylabel("Log2 ratio", fontdict={"size": 20})
         # rotate labels to 90 degree
         ax.set_xticklabels(labels=genes, rotation=90)
         # set y axis range
@@ -254,7 +257,8 @@ def create_chrom_plots(
             ymax += 1
         ax.set(ylim=(ymin, ymax))
         # set chart title
-        ax.set(title=f"{sample_name} - {chromosome}")
+        # ax.set(title=f"{sample_name} - {chromosome}")
+        plt.title(f"{sample_name} - {chromosome}", fontsize=20)
         output_file = path.join(
             output_path, f"{sample_name}_{chromosome}.{file_format}"
         )
