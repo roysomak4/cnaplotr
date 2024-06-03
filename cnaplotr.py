@@ -1,5 +1,5 @@
 import argparse
-import json
+import gzip
 from os import mkdir, path
 
 import pandas as pd
@@ -38,6 +38,8 @@ def plot_cnv():
     cnv_data.reset_index(inplace=True, drop=True)
     cnv_data.reset_index(inplace=True)
 
+    output_filename_suffix = "_cnv_loh_plots"
+
     # Load LOH data
     if args.vcf_file != "no_vcf":
         loh_vars = extract_loh_data(args.vcf_file, args.known_snps_vcf)
@@ -52,6 +54,7 @@ def plot_cnv():
             cnv_data=cnv_data,
             loh_data=loh_data,
         )
+        output_filename_suffix = "cnv_loh_plots"
     else:
         genome_view_file = create_genome_plot(
             sample_dir,
@@ -59,6 +62,7 @@ def plot_cnv():
             args.sample_name,
             cnv_data=cnv_data,
         )
+        output_filename_suffix = "cnv_plots"
     chr_plot_files = create_chrom_plots(
         cnv_data, sample_dir, args.output_format, args.sample_name
     )
@@ -70,7 +74,9 @@ def plot_cnv():
     chr_images = []
     for f in chr_plot_files:
         chr_images.append(Image.open(f).convert("RGB"))
-    output_pdf_file = path.join(plots_dir, f"{args.sample_name}_cnv_loh_plots.pdf")
+    output_pdf_file = path.join(
+        plots_dir, f"{args.sample_name}_{output_filename_suffix}.pdf"
+    )
     genome_image.save(output_pdf_file, save_all=True, append_images=chr_images)
     print(f"PDF file written to {output_pdf_file}")
 
@@ -210,6 +216,8 @@ def create_chrom_plots(
     print("Generating CNV plots per chromosome...")
     chromosomes = list(cnv_data["chromosome"].drop_duplicates())
     chr_plot_files = []
+    print("Loading gene chromosome cytoband info...")
+    gene_cytobands = get_cytoband_transitions("gene_cytoband.txt.gz")
     for chromosome in chromosomes:
         plt.clf()  # clear prior figure
         # set figure size (w, h)
@@ -234,16 +242,6 @@ def create_chrom_plots(
             legend=False,
             palette=c_palette,
         )
-        # set the x-axis gene list and index positions
-        genes, x_tick_pos, gene_vline_positions = get_gene_x_axis_ticks(chr_cnv)
-        for pos in gene_vline_positions:
-            ax.axvline(x=pos, color="black", linewidth=0.6, alpha=0.1)
-        plt.xticks(x_tick_pos, genes)
-        # set axis label title
-        ax.set_xlabel("Gene", fontdict={"size": 20})
-        ax.set_ylabel("Log2 ratio", fontdict={"size": 20})
-        # rotate labels to 90 degree
-        ax.set_xticklabels(labels=genes, rotation=90)
         # set y axis range
         ymin = chr_cnv["log2"].min()
         if ymin > -3:
@@ -256,8 +254,29 @@ def create_chrom_plots(
         else:
             ymax += 1
         ax.set(ylim=(ymin, ymax))
+
+        # set the x-axis gene list and index positions
+        genes, x_tick_pos, gene_vline_positions, pq_trans_idx = get_gene_x_axis_ticks(
+            chr_cnv, gene_cytobands
+        )
+        for pos in gene_vline_positions:
+            if pos == pq_trans_idx:
+                # set the vertical line indicating p arm to q arm transition
+                ax.axvline(x=pos, color="blue", linewidth=0.6, alpha=0.5)
+            else:
+                ax.axvline(x=pos, color="black", linewidth=0.6, alpha=0.1)
+        plt.xticks(x_tick_pos, genes)
+        # set axis label title
+        ax.set_xlabel("Gene", fontdict={"size": 20})
+        ax.set_ylabel("Log2 ratio", fontdict={"size": 20})
+        # rotate labels to 90 degree
+        ax.set_xticklabels(labels=genes, rotation=90)
+
+        # set labels for p and q arms of chromosomes
+        if pq_trans_idx > gene_vline_positions[0]:
+            ax.text(pq_trans_idx - 3, ymax - 0.3, "<- p arm", fontsize=14, ha="right")
+        ax.text(pq_trans_idx + 3, ymax - 0.3, "q arm ->", fontsize=14, ha="left")
         # set chart title
-        # ax.set(title=f"{sample_name} - {chromosome}")
         plt.title(f"{sample_name} - {chromosome}", fontsize=20)
         output_file = path.join(
             output_path, f"{sample_name}_{chromosome}.{file_format}"
@@ -294,16 +313,25 @@ def get_chr_x_axis_ticks(cnv_data: pd.DataFrame):
     return chromosomes, wg_x_tick_points, chr_boundaries
 
 
-def get_gene_x_axis_ticks(chr_cnv_data: pd.DataFrame):
+def get_gene_x_axis_ticks(chr_cnv_data: pd.DataFrame, gene_cytobands: dict):
     genes = list(chr_cnv_data["gene"].drop_duplicates())
     chr_x_tick_points = []
     gene_boundaries = []
     end_idx = 0
+    pq_trans_idx = -1
     for gene in genes:
         gene_cnv_idx = chr_cnv_data.loc[chr_cnv_data["gene"] == gene]["index"]
         start_idx = list(gene_cnv_idx[:1])[0]
         end_idx = list(gene_cnv_idx[-1:])[0]
         gene_boundaries.append(start_idx)
+
+        # find the gene index position where p to q transition occurs
+        if pq_trans_idx == -1:
+            cytoband = gene_cytobands.get(gene, "")
+            if cytoband != "":
+                if "q" in cytoband:
+                    pq_trans_idx = start_idx
+
         idx_range = gene_cnv_idx.count()
         if idx_range > 0:
             mid_point = 0
@@ -314,7 +342,17 @@ def get_gene_x_axis_ticks(chr_cnv_data: pd.DataFrame):
             mid_idx = start_idx + mid_point
             chr_x_tick_points.append(mid_idx)
     gene_boundaries.append(end_idx)
-    return genes, chr_x_tick_points, gene_boundaries
+    return genes, chr_x_tick_points, gene_boundaries, pq_trans_idx
+
+
+def get_cytoband_transitions(cytoband_file: str) -> dict:
+    retInfo = {}
+    with gzip.open(cytoband_file, "r") as f:
+        for byteline in f:
+            line = byteline.decode("UTF-8")
+            gene, cytoband = line.strip().split("\t")
+            retInfo[gene] = cytoband
+    return retInfo
 
 
 def get_plot_metadata(sample_name: str) -> dict:
