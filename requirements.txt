@@ -1,0 +1,4 @@
+pandas==2.0.0
+matplotlib==3.7.1
+seaborn==0.12.2
+pysam==0.22.0
